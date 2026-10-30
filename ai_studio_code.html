@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>J.A.R.V.I.S.</title>
+  <style>
+    body {
+      background-color: #050a0e;
+      color: #00e5ff;
+      font-family: 'Courier New', Courier, monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      text-align: center;
+    }
+    .arc-reactor {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      border: 3px solid #00e5ff;
+      box-shadow: 0 0 20px #00e5ff, inset 0 0 20px #00e5ff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      margin-bottom: 25px;
+      transition: transform 0.2s;
+    }
+    .arc-reactor.active {
+      transform: scale(1.1);
+      box-shadow: 0 0 40px #ff3b30, inset 0 0 40px #ff3b30;
+      border-color: #ff3b30;
+    }
+    #status { font-size: 1.1rem; letter-spacing: 2px; }
+    #output { margin-top: 15px; color: #fff; max-width: 80%; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+
+  <div class="arc-reactor" id="micBtn" onclick="toggleListening()">
+    <span>TAP</span>
+  </div>
+  <div id="status">STANDBY</div>
+  <div id="output">Tap the core to speak to J.A.R.V.I.S.</div>
+
+  <script>
+    // PUT YOUR GROQ API KEY HERE:
+    const GROQ_API_KEY = "YOUR_GROQ_API_KEY_HERE";
+
+    const statusText = document.getElementById('status');
+    const outputText = document.getElementById('output');
+    const micBtn = document.getElementById('micBtn');
+
+    let recognition;
+    let isListening = false;
+
+    // Speech Recognition Setup
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        isListening = true;
+        micBtn.classList.add('active');
+        statusText.innerText = "LISTENING...";
+      };
+
+      recognition.onend = () => {
+        isListening = false;
+        micBtn.classList.remove('active');
+      };
+
+      recognition.onresult = async (event) => {
+        const userText = event.results[0][0].transcript;
+        outputText.innerText = "You: " + userText;
+        statusText.innerText = "THINKING...";
+        await askJarvis(userText);
+      };
+    } else {
+      alert("Speech recognition not supported in this browser. Use Chrome or Safari.");
+    }
+
+    function toggleListening() {
+      if (isListening) {
+        recognition.stop();
+      } else {
+        recognition.start();
+      }
+    }
+
+    // Call Groq Llama-3 API
+    async function askJarvis(prompt) {
+      try {
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${GROQ_API_KEY}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model: "llama3-70b-8192",
+            messages: [
+              {
+                role: "system",
+                content: "You are J.A.R.V.I.S. from Iron Man. Calm, sophisticated British tone, dry humor, loyal. Address user as 'Sir'. Keep responses concise (1-2 sentences) so they can be spoken quickly."
+              },
+              { role: "user", content: prompt }
+            ]
+          })
+        });
+
+        const data = await response.json();
+        const reply = data.choices[0].message.content;
+        outputText.innerText = "JARVIS: " + reply;
+        speak(reply);
+      } catch (err) {
+        statusText.innerText = "ERROR";
+        outputText.innerText = "System error, Sir.";
+      }
+    }
+
+    // Text to Speech with British Voice
+    function speak(text) {
+      statusText.innerText = "SPEAKING...";
+      const utterance = new SpeechSynthesisUtterance(text);
+      
+      // Try finding a British voice
+      const voices = window.speechSynthesis.getVoices();
+      const britishVoice = voices.find(v => v.lang === 'en-GB' || v.name.includes('UK') || v.name.includes('British'));
+      if (britishVoice) utterance.voice = britishVoice;
+      
+      utterance.pitch = 0.95;
+      utterance.rate = 1.0;
+
+      utterance.onend = () => {
+        statusText.innerText = "STANDBY";
+      };
+
+      window.speechSynthesis.speak(utterance);
+    }
+
+    // Load voices
+    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+  </script>
+</body>
+</html>
